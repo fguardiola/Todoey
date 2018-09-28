@@ -10,9 +10,15 @@ import UIKit
 
 class TodoListViewController: UITableViewController {
     var todoData = ["Llamar coxinilla","Concertar cita","Disfrutar de la vida"];
+    var userDefauts = UserDefaults.standard //DB in which you can store dsts for persistency
+    // This DB is unique to this app
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
+        //load data from userdefaults if exist
+        if let items = userDefauts.array(forKey: "ToDoArray") as? [String]{
+            todoData = items
+        }
     }
 
    //MARK - Tableview Datasource Methods
@@ -45,6 +51,8 @@ class TodoListViewController: UITableViewController {
                 self.todoData.append(accesibleTextField.text!)
                 //even if you have added the item it s not going to be diplayed unless you reload the table
                 self.tableView.reloadData()
+                //Persist data
+                self.userDefauts.set(self.todoData, forKey: "ToDoArray")
             }
         }
         alert.addTextField { (alertTextField) in
