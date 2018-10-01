@@ -9,16 +9,30 @@
 import UIKit
 
 class TodoListViewController: UITableViewController {
-    var todoData = ["Llamar coxinilla","Concertar cita","Disfrutar de la vida"];
+    var todoData = [Item]();
     var userDefauts = UserDefaults.standard //DB in which you can store dsts for persistency
+    
+    
+
     // This DB is unique to this app
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
         //load data from userdefaults if exist
-        if let items = userDefauts.array(forKey: "ToDoArray") as? [String]{
+        if let items = userDefauts.array(forKey: "ToDoArray") as? [Item]{
             todoData = items
         }
+        let item1 = Item()
+        item1.title = "Llamer coxinilla"
+        todoData.append(item1)
+        
+        let item2 = Item()
+        item2.title = "Concertar"
+        todoData.append(item2)
+        
+        let item3 = Item()
+        item3.title = "Disfrutar de la vida"
+        todoData.append(item3)
     }
 
    //MARK - Tableview Datasource Methods
@@ -26,18 +40,32 @@ class TodoListViewController: UITableViewController {
         return todoData.count;
     }
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        
+        // This line can cause problems. cells are being reused so when cell dsappear from screen is going to be used for last elmenet of the list (List is long) so the check mark is going to stay. To avoid that we nee to have different objects for each element (Data model)
+        
+        print("cellrowat indexpath called")
         let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath)
         
-        cell.textLabel?.text = todoData[indexPath.row];
+        let item = todoData[indexPath.row]
+        
+        //we have a reference of the object
+        cell.textLabel?.text = item.title;
+        
+        
+        cell.accessoryType = item.done ? .checkmark : .none
+       
+
+        //reload data
         return cell;
     }
     //MARK - TableViewController Methods
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        if tableView.cellForRow(at: indexPath)?.accessoryType == .checkmark {
-            tableView.cellForRow(at: indexPath)?.accessoryType = .none;
-        }else {
-            tableView.cellForRow(at: indexPath)?.accessoryType = .checkmark
-        }
+        //change the done property
+        let item = todoData[indexPath.row]
+        
+        item.done = !item.done
+        //reload data to reflect the accesory type change
+        self.tableView.reloadData()
         tableView.deselectRow(at: indexPath, animated: true)
     }
     @IBAction func addButtonPressed(_ sender: Any) {
@@ -48,12 +76,16 @@ class TodoListViewController: UITableViewController {
         let action = UIAlertAction(title: "Add", style: .default) { (action) in
             //Handle user clicks
             if (accesibleTextField.text?.count)! > 0 {
-                self.todoData.append(accesibleTextField.text!)
+                let newItem = Item()
+                newItem.title = accesibleTextField.text!;
+                self.todoData.append(newItem)
+                //Persist data
+           
+                self.userDefauts.set(self.todoData, forKey: "TodosArray")
                 //even if you have added the item it s not going to be diplayed unless you reload the table
                 self.tableView.reloadData()
-                //Persist data
-                self.userDefauts.set(self.todoData, forKey: "ToDoArray")
             }
+            
         }
         alert.addTextField { (alertTextField) in
             alertTextField.placeholder = "New todoey"
