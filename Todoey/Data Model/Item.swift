@@ -9,7 +9,7 @@
 import Foundation
 import UIKit
 
-class Item {
+class Item: Encodable, Decodable {
     var title:  String = ""
     var done: Bool = false
     

@@ -10,18 +10,19 @@ import UIKit
 
 class TodoListViewController: UITableViewController {
     var todoData = [Item]();
-    var userDefauts = UserDefaults.standard //DB in which you can store dsts for persistency
+//    var userDefauts = UserDefaults.standard //DB in which you can store dsts for persistency
     
-    
-
+    // Get path to user files current app & add a component to store our items
+    var dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Item.plist")
     // This DB is unique to this app
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
         //load data from userdefaults if exist
-        if let items = userDefauts.array(forKey: "ToDoArray") as? [Item]{
-            todoData = items
-        }
+        print(dataFilePath)
+//        if let items = userDefauts.array(forKey: "ToDoArray") as? [Item]{
+//            todoData = items
+//        }
         let item1 = Item()
         item1.title = "Llamer coxinilla"
         todoData.append(item1)
@@ -33,6 +34,8 @@ class TodoListViewController: UITableViewController {
         let item3 = Item()
         item3.title = "Disfrutar de la vida"
         todoData.append(item3)
+        
+        loadItems()
     }
 
    //MARK - Tableview Datasource Methods
@@ -66,6 +69,7 @@ class TodoListViewController: UITableViewController {
         item.done = !item.done
         //reload data to reflect the accesory type change
         self.tableView.reloadData()
+        self.saveData()
         tableView.deselectRow(at: indexPath, animated: true)
     }
     @IBAction func addButtonPressed(_ sender: Any) {
@@ -80,10 +84,13 @@ class TodoListViewController: UITableViewController {
                 newItem.title = accesibleTextField.text!;
                 self.todoData.append(newItem)
                 //Persist data
-           
-                self.userDefauts.set(self.todoData, forKey: "TodosArray")
+                // Breaking cause we are trying to save custom objects. Not a good use of userDefaults. Need NSCoder
+                //self.userDefauts.set(self.todoData, forKey: "TodosArray")
                 //even if you have added the item it s not going to be diplayed unless you reload the table
                 self.tableView.reloadData()
+                //saving dta NScoder
+               self.saveData()
+                
             }
             
         }
@@ -94,6 +101,27 @@ class TodoListViewController: UITableViewController {
         }
         alert.addAction(action)
         present(alert, animated: true)
+    }
+    func saveData (){
+        let encoder = PropertyListEncoder()
+        do{
+            let dataToEncode = try encoder.encode(self.todoData)
+            try dataToEncode.write(to: self.dataFilePath!)
+        }catch{
+            print("Error encoding item arra, \(error)")
+        }
+    }
+    func loadItems(){
+        //decode dat from items plist
+        if let data = try? Data(contentsOf: dataFilePath!){
+            let decoder = PropertyListDecoder()
+            do{
+                self.todoData = try decoder.decode([Item].self, from: data)
+            }catch{
+                print("Error decoding item array \(error)")
+            }
+        }
+        
     }
 }
 
