@@ -7,10 +7,11 @@
 //
 
 import UIKit
-import CoreData
+import RealmSwift
 
 class TodoListViewController: UITableViewController {
-    var todoData = [Item]();
+    let realm = try! Realm()
+    var todoData : Results<Item>?
     //optional because is going to be nil till its set by the other vc
     var selectedCategory: Category? {
         didSet{
@@ -18,24 +19,17 @@ class TodoListViewController: UITableViewController {
             loadItems()
         }
     }
-    //we need to ccess the APPdelegate class context
-    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
-//    var userDefauts = UserDefaults.standard //DB in which you can store dsts for persistency
-    
-    // Get path to user files current app & add a component to store our items
-//    var dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Item.plist")
-    // This DB is unique to this app
     override func viewDidLoad() {
         super.viewDidLoad()
         
         print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
         
-        loadItems()
+//        loadItems()
     }
 
    //MARK - Tableview Datasource Methods
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return todoData.count;
+        return todoData?.count ?? 1
     }
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         
@@ -43,14 +37,12 @@ class TodoListViewController: UITableViewController {
         
         let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath)
         
-        let item = todoData[indexPath.row]
-    
-        
-        //we have a reference of the object
-        cell.textLabel?.text = item.title;
-        
-        
-        cell.accessoryType = item.done ? .checkmark : .none
+        if let item = todoData?[indexPath.row]{
+             cell.textLabel?.text = item.title
+             cell.accessoryType = item.done ? .checkmark : .none
+        }else{
+            cell.textLabel?.text = "No todos added yet"
+        }
        
 
         //reload data
@@ -58,19 +50,21 @@ class TodoListViewController: UITableViewController {
     }
     //MARK - TableViewController Methods
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        //change the done property
-        let item = todoData[indexPath.row]
-        //remove an item would be. Order matters
-        /*
-        let item = todoData[indexPath.row]
-        context.delete(item)
-        todoData.remove(at: indexPath.row)
-        self.saveData()
-         */
-        item.done = !item.done
-        //reload data to reflect the accesory type change
-        self.tableView.reloadData()
-        self.saveData()
+        if let item = todoData?[indexPath.row]{
+            //Update done prperty
+            do{
+                try realm.write{
+                    //if you wanted to delete
+//                    realm.delete(item)
+                    item.done = !item.done
+                }
+            }catch{
+                print("Error saving done status \(error)")
+            }
+        }
+        
+        tableView.reloadData()
+        
         tableView.deselectRow(at: indexPath, animated: true)
     }
     @IBAction func addButtonPressed(_ sender: Any) {
@@ -82,18 +76,25 @@ class TodoListViewController: UITableViewController {
             //Handle user clicks
             if (accesibleTextField.text?.count)! > 0 {
                
-                let newItem = Item(context: self.context)
-                newItem.title = accesibleTextField.text!;
-                newItem.done = false
-                newItem.parentCategory = self.selectedCategory
-                self.todoData.append(newItem)
-                //Persist data
-                // Breaking cause we are trying to save custom objects. Not a good use of userDefaults. Need NSCoder
-                //self.userDefauts.set(self.todoData, forKey: "TodosArray")
-                //even if you have added the item it s not going to be diplayed unless you reload the table
+                if let currentCategory = self.selectedCategory{
+                    do{
+                        try self.realm.write{
+                            //we have to add an item to that selected category
+                            let newItem = Item()
+                            newItem.title = accesibleTextField.text!
+                            newItem.dateCreated = Date()
+                            // this is set as default
+                            //  newItem.done = false
+                            //newItem.parentCategory = self.selectedCategory //we can do it the other way around
+                            currentCategory.items.append(newItem)
+                        }
+                    }catch{
+                        print("Error tring to save todo \(error)")
+                    }
+                   
+                }
+            
                 self.tableView.reloadData()
-                //saving dta NScoder
-               self.saveData()
                 
             }
             
@@ -106,29 +107,9 @@ class TodoListViewController: UITableViewController {
         alert.addAction(action)
         present(alert, animated: true)
     }
-    func saveData (){
-        do{
-            try context.save()
-        }catch{
-               print("Error saving context \(error)")
-        }
-    }
     // internal and external parameters with default value
-    func loadItems(with request:NSFetchRequest<Item> = Item.fetchRequest(), predicate:NSPredicate? = nil){
-       //we need to load only items for selected category but from the search you can have another predicate
-        
-        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
-        if let additionalPredicate = predicate {
-            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate])
-        }else {
-            request.predicate  = categoryPredicate
-        }
-    
-        do{
-            todoData = try context.fetch(request)
-        }catch{
-            print("Error fetching the context: \(error)")
-        }
+    func loadItems(){
+        todoData = selectedCategory?.items.sorted(byKeyPath: "title", ascending: true)
         tableView.reloadData()
     }
 }
@@ -136,18 +117,13 @@ class TodoListViewController: UITableViewController {
 //MARK:- Search bar methods
 extension TodoListViewController: UISearchBarDelegate{
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-        // Reload table view with data from the query
-        let request : NSFetchRequest<Item> = Item.fetchRequest()
-//        String comparisons are by default case and diacritic sensitive. You can modify an operator using the key characters c and d within square braces to specify case and diacritic insensitivity respectively, for example firstName BEGINSWITH[cd]
-        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
-        //sort the data back
-        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
-        loadItems(with:request, predicate: predicate)
-        
+        //Query with realm
+        //todoData = todoData?.filter("title CONTAINS[cd] %@", searchBar.text!).sorted(byKeyPath: "title", ascending: true)
+        //order by date created
+        todoData = todoData?.filter("title CONTAINS[cd] %@", searchBar.text!).sorted(byKeyPath: "dateCreated", ascending: true)
+         tableView.reloadData()
     }
-//    func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
-//        loadItems()
-//    }
+
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
         if searchBar.text?.count == 0{
             DispatchQueue.main.async {
